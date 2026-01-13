@@ -4,7 +4,7 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/agentic-c-eda.git
+git clone https://github.com/mooseses/agentic-c-eda.git
 cd agentic-c-eda
 
 # Run installer (as root)

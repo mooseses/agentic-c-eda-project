@@ -1,6 +1,6 @@
 [Unit]
 Description=C-EDA Daemon - Cognitive Network Defense
-Documentation=https://github.com/YOUR_USERNAME/agentic-c-eda
+Documentation=https://github.com/mooseses/agentic-c-eda
 After=network.target
 
 [Service]
