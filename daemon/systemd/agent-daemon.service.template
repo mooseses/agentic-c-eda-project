@@ -1,0 +1,22 @@
+[Unit]
+Description=C-EDA Daemon - Cognitive Network Defense
+Documentation=https://github.com/YOUR_USERNAME/agentic-c-eda
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=INSTALL_DIR/daemon
+ExecStart=INSTALL_DIR/daemon/venv/bin/python main.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+NoNewPrivileges=false
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/agentic-c-eda INSTALL_DIR/daemon/.agent
+
+[Install]
+WantedBy=multi-user.target

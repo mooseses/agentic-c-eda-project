@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Logs
+*.log
+security_events.log
+agent_decisions.log
+chatbot.log
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# PTY sockets
+.agent/
+daemon/.agent/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated service file (use template instead)
+C-EDA-daemon.service
+systemd/C-EDA-daemon.service
+daemon/systemd/C-EDA-daemon.service
+# Legacy names
+agent-daemon.service
+systemd/agent-daemon.service
+daemon/systemd/agent-daemon.service
+
+# Environment
+.env
+.env.local
+
+# Docker
+.dockerignore
+
+# Test files
+test_*.py
+tests/__pycache__/
+.pytest_cache/
+.coverage
+htmlcov/

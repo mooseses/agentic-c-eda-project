@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agentic C-EDA Dashboard</title>
+    <meta name="description" content="Cognitive Network Defense System - Real-time Security Monitoring">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        // Configure marked for GitHub Flavored Markdown
+        marked.setOptions({
+            gfm: true,
+            breaks: true
+        });
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+    <script src="/static/chat.js"></script>
+</head>
+
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <h1>Agentic C-EDA</h1>
+            </div>
+            <nav class="header-nav">
+                <button class="nav-btn" :class="{ active: activeTab === 'dashboard' }"
+                    @click="activeTab = 'dashboard'">Dashboard</button>
+                <button class="nav-btn" :class="{ active: activeTab === 'agent' }" @click="activeTab = 'agent'">Agent
+                    Config</button>
+                <button class="nav-btn" :class="{ active: activeTab === 'advanced' }"
+                    @click="activeTab = 'advanced'">Advanced</button>
+                <button class="nav-btn" :class="{ active: activeTab === 'debug' }"
+                    @click="activeTab = 'debug'; connectLogStream()">Debug</button>
+            </nav>
+            <div class="header-right">
+                <button class="theme-toggle" @click="toggleTheme"
+                    :title="isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'">
+                    <span v-if="isDarkMode">☀️</span>
+                    <span v-else>🌙</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Dashboard Tab -->
+        <main class="main dashboard-grid" v-show="activeTab === 'dashboard'">
+            <!-- Left Column: Events -->
+            <section class="panel events-panel">
+                <div class="panel-header">
+                    <h2>Live Events</h2>
+                    <div class="header-buttons">
+                        <button @click="clearEvents" class="btn-small">Clear</button>
+                        <span class="count">{{ events.length }}</span>
+                    </div>
+                </div>
+                <div class="panel-content">
+                    <div v-if="events.length === 0" class="empty-state">
+                        <p>Awaiting events...</p>
+                    </div>
+                    <div v-for="event in events" :key="event.id" class="event-item" :class="event.event_type">
+                        <div class="event-time">{{ formatTime(event.timestamp) }}</div>
+                        <span class="event-type">{{ event.event_type }}</span>
+                        <span class="event-details">{{ formatEventDetails(event.raw_event) }}</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Center Column: Chat -->
+            <section class="panel chat-panel">
+                <chat-component :api-key="apiKey"></chat-component>
+            </section>
+
+            <!-- Right Column: Decisions + Config -->
+            <section class="panel right-panel">
+                <!-- Compact Config -->
+                <div class="config-compact">
+                    <div class="input-group">
+                        <input type="password" v-model="apiKey" placeholder="API Key...">
+                        <button @click="connectStreams" class="btn-primary btn-sm">Connect</button>
+                    </div>
+                    <div class="connection-status" :class="{ connected: connected }">
+                        <span class="status-dot" :class="{ disconnected: !connected }"></span>
+                        <span>{{ connected ? 'Connected' : 'Disconnected' }}</span>
+                    </div>
+                </div>
+
+                <!-- Decisions -->
+                <div class="decisions-section">
+                    <div class="section-header">
+                        <h3>Agent Decisions</h3>
+                        <button @click="clearDecisions" class="btn-small">Clear</button>
+                    </div>
+                    <div class="decisions-list">
+                        <div v-if="decisions.length === 0" class="empty-state small">
+                            <p>No decisions yet</p>
+                        </div>
+                        <div v-for="decision in decisions" :key="decision.id" class="decision-compact"
+                            :class="decision.verdict">
+                            <div class="decision-header-compact">
+                                <span class="verdict-badge" :class="decision.verdict">{{ decision.verdict }}</span>
+                                <span class="decision-time-compact">{{ formatTime(decision.timestamp) }}</span>
+                            </div>
+                            <div class="decision-reason-compact">{{ decision.reason }}</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Pending Actions Panel (always visible) -->
+            <section class="pending-actions-panel">
+                <div class="pending-header">
+                    <h2>Pending Actions</h2>
+                    <span class="pending-count" v-if="pendingFlags.length">{{ pendingFlags.length }}</span>
+                </div>
+                <div class="pending-cards" @wheel="handleWheel">
+                    <div v-if="pendingFlags.length === 0" class="pending-empty">
+                        No pending actions
+                    </div>
+                    <transition-group name="card-list" tag="div" class="pending-cards-inner">
+                        <div v-for="flag in pendingFlags" :key="flag.id" class="pending-card" :class="flag.severity">
+                            <div class="pending-card-header">
+                                <span class="pending-severity" :class="flag.severity">{{ flag.severity?.toUpperCase() ||
+                                    'ALERT' }}</span>
+                                <span class="pending-time">{{ formatTime(flag.timestamp) }}</span>
+                            </div>
+                            <div class="pending-content">
+                                <div class="pending-summary">{{ flag.summary }}</div>
+                                <div class="pending-details">
+                                    <div v-if="flag.event_ids && flag.event_ids.length" class="pending-events">
+                                        {{ flag.event_ids.length }} related event(s)
+                                    </div>
+                                    <div v-if="flag.suggested_actions && flag.suggested_actions.length"
+                                        class="pending-actions-list">
+                                        Actions: {{ flag.suggested_actions.join(', ') }}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="pending-buttons">
+                                <button @click="dismissFlag(flag.id)" class="btn-dismiss">Dismiss</button>
+                                <button @click="investigateFlag(flag)" class="btn-investigate">Investigate</button>
+                            </div>
+                        </div>
+                    </transition-group>
+                </div>
+            </section>
+
+        </main>
+
+        <!-- Agent Config Tab -->
+        <main class="main settings-page" v-show="activeTab === 'agent'">
+            <section class="panel full-width">
+                <div class="panel-header">
+                    <h2>Agent Connection Settings</h2>
+                </div>
+                <div class="settings-content">
+                    <div class="info-box">
+                        <strong>Instructions:</strong> Configure your local Agent endpoint. Agentic C-EDA uses a local
+                        LLM
+                        (via LM Studio or similar) for contextual security analysis. The Agent must be running and
+                        accessible at the specified URL.
+                    </div>
+
+                    <!-- OpenAI API URL -->
+                    <div class="setting-group">
+                        <h3>OpenAI API URL</h3>
+                        <p class="setting-desc">The OpenAI-compatible API endpoint for your local Agent.</p>
+                        <input type="text" v-model="config.llm_api_url"
+                            placeholder="http://localhost:1234/v1/chat/completions">
+                    </div>
+
+                    <!-- API Key -->
+                    <div class="setting-group">
+                        <h3>API Key</h3>
+                        <p class="setting-desc">Optional API key for authentication (leave empty for local LM Studio).
+                        </p>
+                        <input type="password" v-model="config.llm_api_key" placeholder="sk-...">
+                    </div>
+
+                    <!-- Agent Model -->
+                    <div class="setting-group">
+                        <h3>Agent Model</h3>
+                        <p class="setting-desc">Model identifier as shown in your Agent server.</p>
+                        <input type="text" v-model="config.llm_model" placeholder="qwen/qwen3-4b-2507">
+                    </div>
+
+                    <!-- Agent Timeout -->
+                    <div class="setting-group">
+                        <h3>Agent Timeout (seconds)</h3>
+                        <p class="setting-desc">Maximum time to wait for Agent response before defaulting to ALLOW.</p>
+                        <input type="number" v-model="config.llm_timeout" min="1" max="60" placeholder="10">
+                    </div>
+
+                    <!-- Agent Sensitivity -->
+                    <div class="setting-group">
+                        <h3>Agent Sensitivity</h3>
+                        <p class="setting-desc">How aggressive the Agent is at blocking suspicious traffic.</p>
+                        <input type="range" min="1" max="10" v-model="config.sensitivity" class="sensitivity-slider"
+                            @change="updateConfig">
+                        <div class="sensitivity-value">
+                            Level {{ config.sensitivity }}/10
+                            <span class="sensitivity-label">{{ sensitivityLabel }}</span>
+                        </div>
+                    </div>
+
+                    <!-- Event Buffer -->
+                    <div class="setting-group">
+                        <h3>Event Buffer (seconds)</h3>
+                        <p class="setting-desc">How long to buffer events before sending to the Agent for analysis.
+                            Default: 5 seconds.</p>
+                        <input type="number" v-model="config.event_buffer" min="1" max="60" placeholder="5"
+                            @change="updateConfig">
+                    </div>
+
+                    <div class="button-row">
+                        <button @click="updateConfig" class="btn-primary">Save Settings</button>
+                        <button @click="testConnection" class="btn-secondary" :disabled="connectionTesting">
+                            {{ connectionTesting ? 'Testing...' : 'Test Connection' }}
+                        </button>
+                        <span v-if="connectionResult" class="connection-result"
+                            :class="{ success: connectionResult.success }">
+                            {{ connectionResult.message }}
+                        </span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Push Notifications Settings -->
+            <section class="panel full-width" style="margin-top: 1rem;">
+                <div class="panel-header">
+                    <h2>🔔 Push Notifications</h2>
+                </div>
+                <div class="settings-content">
+                    <div class="info-box">
+                        <strong>Instructions:</strong> Configure push notification services to receive alerts on your
+                        devices.
+                        Telegram requires a bot token and chat ID. Bark is an iOS app for receiving push notifications.
+                    </div>
+
+                    <!-- Telegram Settings -->
+                    <div class="setting-group">
+                        <h3>Telegram Bot</h3>
+                        <p class="setting-desc">Create a bot via @BotFather to get a token. Use @userinfobot to get your
+                            chat ID.</p>
+                        <div class="input-row">
+                            <input type="password" v-model="notificationConfig.telegram_token"
+                                placeholder="Bot Token (e.g., 123456:ABC...)">
+                            <input type="text" v-model="notificationConfig.telegram_chat_id"
+                                placeholder="Chat ID (e.g., 12345678)">
+                            <button @click="testTelegram" class="btn-secondary btn-sm" :disabled="testingTelegram">
+                                {{ testingTelegram ? 'Testing...' : 'Test' }}
+                            </button>
+                        </div>
+                        <span v-if="telegramResult" class="test-result" :class="{ success: telegramResult.success }">
+                            {{ telegramResult.message }}
+                        </span>
+                    </div>
+
+                    <!-- Bark Settings -->
+                    <div class="setting-group">
+                        <h3>Bark (iOS)</h3>
+                        <p class="setting-desc">Install Bark app on iOS and copy your device URL.</p>
+                        <div class="input-row">
+                            <input type="text" v-model="notificationConfig.bark_url"
+                                placeholder="Bark URL (e.g., https://api.day.app/YOUR_KEY)" style="flex: 1;">
+                            <button @click="testBark" class="btn-secondary btn-sm" :disabled="testingBark">
+                                {{ testingBark ? 'Testing...' : 'Test' }}
+                            </button>
+                        </div>
+                        <span v-if="barkResult" class="test-result" :class="{ success: barkResult.success }">
+                            {{ barkResult.message }}
+                        </span>
+                    </div>
+
+                    <div class="button-row">
+                        <button @click="saveNotificationConfig" class="btn-primary">Save Notification Settings</button>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Advanced Tab -->
+        <main class="main settings-page" v-show="activeTab === 'advanced'">
+            <section class="panel full-width">
+                <div class="panel-header">
+                    <h2>Advanced Settings</h2>
+                </div>
+                <div class="settings-content">
+                    <!-- Ignore Lists -->
+                    <div class="dual-columns">
+                        <div class="setting-group">
+                            <h3>Ports to Always Ignore</h3>
+                            <p class="setting-desc">One port per line. Events from these ports will be completely
+                                ignored.</p>
+                            <textarea v-model="config.ignored_ports" rows="5" placeholder="22&#10;80&#10;443"
+                                @change="updateConfig"></textarea>
+                        </div>
+                        <div class="setting-group">
+                            <h3>IPs to Always Ignore</h3>
+                            <p class="setting-desc">One IP per line. Events from these IPs will be completely ignored.
+                            </p>
+                            <textarea v-model="config.ignored_ips" rows="5" placeholder="127.0.0.1&#10;10.0.0.1"
+                                @change="updateConfig"></textarea>
+                        </div>
+                    </div>
+
+                    <!-- Trusted Ports -->
+                    <div class="setting-group">
+                        <h3>Trusted Ports</h3>
+                        <p class="setting-desc">Ports considered safe. Agent-approved ports are highlighted in blue.
+                            Click X to remove.</p>
+                        <div class="port-list">
+                            <span v-if="allTrustedPorts.length === 0" class="no-ports">No trusted ports
+                                configured</span>
+                            <span v-for="port in allTrustedPorts" :key="port.value" class="port-tag"
+                                :class="{ dynamic: port.dynamic }">
+                                {{ port.value }}
+                                <button @click="removePort(port.value)" class="port-remove">x</button>
+                            </span>
+                        </div>
+                        <div class="input-group" style="margin-top: 0.75rem;">
+                            <input type="number" v-model="newPort" placeholder="Add port..." min="1" max="65535">
+                            <button @click="addPort" class="btn-secondary">Add Port</button>
+                        </div>
+                    </div>
+
+                    <!-- Custom System Prompt -->
+                    <div class="setting-group">
+                        <h3>Custom System Prompt</h3>
+                        <p class="setting-desc">Override the default Agent system prompt. Leave empty to use default.
+                        </p>
+                        <textarea v-model="config.custom_prompt" rows="6"
+                            placeholder="Enter custom system prompt for the Agent..."></textarea>
+                        <button @click="updateConfig" class="btn-primary" style="margin-top: 0.5rem;">Save
+                            Prompt</button>
+                    </div>
+
+                    <!-- Database Maintenance -->
+                    <div class="setting-group">
+                        <h3>Database Maintenance</h3>
+                        <p class="setting-desc">Purge all events and decisions from the database. This action is
+                            irreversible.</p>
+                        <button @click="purgeLogs" class="btn-danger">Purge All Logs</button>
+                        <span v-if="purgeResult" class="purge-result">{{ purgeResult }}</span>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Debug Tab -->
+        <main class="main settings-page" v-show="activeTab === 'debug'">
+            <section class="panel full-width">
+                <div class="panel-header">
+                    <h2>Debug Logs</h2>
+                    <div class="header-buttons">
+                        <div class="level-filters">
+                            <button class="level-btn" :class="{ active: logFilter === null }"
+                                @click="logFilter = null">All</button>
+                            <button class="level-btn info" :class="{ active: logFilter === 'INFO' }"
+                                @click="logFilter = 'INFO'">INFO</button>
+                            <button class="level-btn warning" :class="{ active: logFilter === 'WARNING' }"
+                                @click="logFilter = 'WARNING'">WARNING</button>
+                            <button class="level-btn error" :class="{ active: logFilter === 'ERROR' }"
+                                @click="logFilter = 'ERROR'">ERROR</button>
+                        </div>
+                        <label class="toggle-label">
+                            <input type="checkbox" v-model="dryRunMode" @change="updateDryRunMode">
+                            <span>Dry Run</span>
+                        </label>
+                        <button @click="clearLogs" class="btn-small">Clear</button>
+                        <span class="count">{{ filteredLogs.length }} logs</span>
+                    </div>
+                </div>
+                <div class="panel-content log-content">
+                    <div v-if="filteredLogs.length === 0" class="empty-state">
+                        <p>No logs to display...</p>
+                    </div>
+                    <div v-for="log in filteredLogs" :key="log.id" class="log-item" :class="log.level">
+                        <div class="log-meta">
+                            <span class="log-level" :class="log.level">{{ log.level }}</span>
+                            <span class="log-source">{{ log.source }}</span>
+                            <span class="log-time">{{ formatTime(log.timestamp) }}</span>
+                        </div>
+                        <div class="log-message">{{ log.message }}</div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Vue 3 via CDN -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script>
+        const { createApp, ref, reactive, computed, onMounted, onUnmounted } = Vue;
+
+        const app = createApp({
+            setup() {
+                // State
+                const apiKey = ref(localStorage.getItem('sentinel_api_key') || '');
+                const connected = ref(false);
+                const activeTab = ref('dashboard');
+                const events = ref([]);
+                const decisions = ref([]);
+                const logs = ref([]);
+                const logFilter = ref(null);
+                const newPort = ref('');
+                const connectionTesting = ref(false);
+                const connectionResult = ref(null);
+                const purgeResult = ref(null);
+                const dryRunMode = ref(false);
+
+                // Theme state - default to system preference or saved preference
+                const getInitialTheme = () => {
+                    const saved = localStorage.getItem('sentinel_theme');
+                    if (saved) return saved === 'dark';
+                    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+                };
+                const isDarkMode = ref(getInitialTheme());
+
+                // Apply theme on load
+                if (!isDarkMode.value) {
+                    document.documentElement.setAttribute('data-theme', 'light');
+                }
+
+                const toggleTheme = () => {
+                    isDarkMode.value = !isDarkMode.value;
+                    if (isDarkMode.value) {
+                        document.documentElement.removeAttribute('data-theme');
+                        localStorage.setItem('sentinel_theme', 'dark');
+                    } else {
+                        document.documentElement.setAttribute('data-theme', 'light');
+                        localStorage.setItem('sentinel_theme', 'light');
+                    }
+                };
+
+                // (Chat state moved to ChatComponent)
+                const config = reactive({
+                    sensitivity: 5,
+                    trusted_ports_manual: [],
+                    trusted_ports_dynamic: [],
+                    ignored_ports: '',
+                    ignored_ips: '',
+                    custom_prompt: '',
+                    llm_api_url: 'http://localhost:1234/v1/chat/completions',
+                    llm_api_key: '',
+                    llm_model: 'qwen/qwen3-4b-2507',
+                    llm_timeout: 10,
+                    event_buffer: 5
+                });
+                const stats = ref({
+                    total_events: 0,
+                    events_last_hour: 0,
+                    total_decisions: 0,
+                    blocks_today: 0
+                });
+                const pendingFlags = ref([]);
+
+                // Notification config
+                const notificationConfig = ref({
+                    telegram_token: '',
+                    telegram_chat_id: '',
+                    bark_url: ''
+                });
+                const testingTelegram = ref(false);
+                const testingBark = ref(false);
+                const telegramResult = ref(null);
+                const barkResult = ref(null);
+
+                // SSE connections
+                let eventSource = null;
+                let decisionSource = null;
+                let logSource = null;
+                let flagSource = null;
+                let statsInterval = null;
+
+                // Computed
+                const sensitivityLabel = computed(() => {
+                    if (config.sensitivity <= 3) return 'Relaxed';
+                    if (config.sensitivity <= 6) return 'Balanced';
+                    return 'Paranoid';
+                });
+
+                const allTrustedPorts = computed(() => {
+                    const ports = [];
+                    // Add manual ports (not highlighted)
+                    for (const p of config.trusted_ports_manual) {
+                        ports.push({ value: p, dynamic: false });
+                    }
+                    // Add dynamic ports (highlighted)
+                    for (const p of config.trusted_ports_dynamic) {
+                        if (!config.trusted_ports_manual.includes(p)) {
+                            ports.push({ value: p, dynamic: true });
+                        }
+                    }
+                    return ports.sort((a, b) => a.value - b.value);
+                });
+
+                const filteredLogs = computed(() => {
+                    if (!logFilter.value) return logs.value;
+                    return logs.value.filter(l => l.level === logFilter.value);
+                });
+
+                // Methods
+                const formatTime = (timestamp) => {
+                    const date = new Date(timestamp);
+                    return date.toLocaleTimeString();
+                };
+
+                const renderMarkdown = (text) => {
+                    if (!text) return '';
+                    try {
+                        // Ensure text is a string
+                        const str = String(text);
+                        return marked.parse(str);
+                    } catch (e) {
+                        console.error('Markdown render error:', e);
+                        return text;
+                    }
+                };
+
+                const getConfidenceClass = (confidence) => {
+                    if (confidence >= 0.7) return 'high';
+                    if (confidence >= 0.4) return 'medium';
+                    return 'low';
+                };
+
+                const formatEventDetails = (rawEvent) => {
+                    // Strip the event type prefix (first word) to avoid duplication
+                    const parts = rawEvent.split(' ');
+                    return parts.slice(1).join(' ');
+                };
+
+                const clearEvents = () => {
+                    events.value = [];
+                };
+
+                const clearDecisions = () => {
+                    decisions.value = [];
+                };
+
+                // Pending actions handlers
+                const investigateFlag = (flag) => {
+                    // Switch to dashboard (chat is there)
+                    activeTab.value = 'dashboard';
+
+                    // Remove from pending list (it's now being investigated in chat)
+                    pendingFlags.value = pendingFlags.value.filter(f => f.id !== flag.id);
+
+                    // Get the chat component instance and set the investigation flag
+                    // This shows the investigation card in the chat area
+                    window.dispatchEvent(new CustomEvent('investigate-flag', { detail: flag }));
+                };
+
+                const dismissFlag = async (flagId) => {
+                    if (!apiKey.value) return;
+                    try {
+                        await fetch(`/api/flags/${flagId}/dismiss`, {
+                            method: 'POST',
+                            headers: { 'X-API-Key': apiKey.value }
+                        });
+                        // Remove from local array immediately for responsive UI
+                        pendingFlags.value = pendingFlags.value.filter(f => f.id !== flagId);
+                    } catch (e) {
+                        console.error('Dismiss error:', e);
+                    }
+                };
+
+                // Listen for return-to-pending event from chat component
+                window.addEventListener('return-to-pending', (e) => {
+                    if (e.detail) {
+                        // Add the flag back to pending list
+                        pendingFlags.value.unshift(e.detail);
+                    }
+                });
+
+                // Notification methods
+                const testTelegram = async () => {
+                    if (!apiKey.value) return;
+                    // First save the config
+                    await saveNotificationConfig();
+                    testingTelegram.value = true;
+                    telegramResult.value = null;
+                    try {
+                        const res = await fetch('/api/notifications/test/telegram', {
+                            method: 'POST',
+                            headers: { 'X-API-Key': apiKey.value }
+                        });
+                        if (res.ok) {
+                            telegramResult.value = await res.json();
+                        } else {
+                            const text = await res.text();
+                            telegramResult.value = { success: false, message: `HTTP ${res.status}: ${text.slice(0, 100)}` };
+                        }
+                    } catch (e) {
+                        telegramResult.value = { success: false, message: e.message };
+                    }
+                    testingTelegram.value = false;
+                };
+
+                const testBark = async () => {
+                    if (!apiKey.value) return;
+                    // First save the config
+                    await saveNotificationConfig();
+                    testingBark.value = true;
+                    barkResult.value = null;
+                    try {
+                        const res = await fetch('/api/notifications/test/bark', {
+                            method: 'POST',
+                            headers: { 'X-API-Key': apiKey.value }
+                        });
+                        if (res.ok) {
+                            barkResult.value = await res.json();
+                        } else {
+                            const text = await res.text();
+                            barkResult.value = { success: false, message: `HTTP ${res.status}: ${text.slice(0, 100)}` };
+                        }
+                    } catch (e) {
+                        barkResult.value = { success: false, message: e.message };
+                    }
+                    testingBark.value = false;
+                };
+
+                const saveNotificationConfig = async () => {
+                    if (!apiKey.value) return;
+                    try {
+                        await fetch('/api/config', {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-API-Key': apiKey.value
+                            },
+                            body: JSON.stringify({
+                                notification_telegram_token: notificationConfig.value.telegram_token,
+                                notification_telegram_chat_id: notificationConfig.value.telegram_chat_id,
+                                notification_bark_url: notificationConfig.value.bark_url
+                            })
+                        });
+                    } catch (e) {
+                        console.error('Save notification config error:', e);
+                    }
+                };
+
+                const handleWheel = (e) => {
+                    if (e.deltaY !== 0) {
+                        e.currentTarget.scrollLeft += e.deltaY;
+                        e.preventDefault();
+                    }
+                };
+
+                const fetchStats = async () => {
+                    if (!apiKey.value) return;
+                    try {
+                        const res = await fetch('/api/stats', {
+                            headers: { 'X-API-Key': apiKey.value }
+                        });
+                        if (res.ok) {
+                            stats.value = await res.json();
+                        }
+                    } catch (e) {
+                        console.error('Stats fetch error:', e);
+                    }
+                };
+
+                const fetchConfig = async () => {
+                    if (!apiKey.value) return;
+                    try {
+                        const res = await fetch('/api/config', {
+                            headers: { 'X-API-Key': apiKey.value }
+                        });
+                        if (res.ok) {
+                            const data = await res.json();
+                            Object.assign(config, data);
+                        }
+                    } catch (e) {
+                        console.error('Config fetch error:', e);
+                    }
+                };
+
+                const fetchInitialData = async () => {
+                    if (!apiKey.value) return;
+                    try {
+                        const eventsRes = await fetch('/api/events?limit=50', {
+                            headers: { 'X-API-Key': apiKey.value }
+                        });
+                        if (eventsRes.ok) {
+                            events.value = await eventsRes.json();
+                        }
+
+                        const decisionsRes = await fetch('/api/decisions?limit=20', {
+                            headers: { 'X-API-Key': apiKey.value }
+                        });
+                        if (decisionsRes.ok) {
+                            decisions.value = await decisionsRes.json();
+                        }
+
+                        await fetchConfig();
+                        await fetchStats();
+                    } catch (e) {
+                        console.error('Initial data fetch error:', e);
+                    }
+                };
+
+                const connectStreams = async () => {
+                    localStorage.setItem('sentinel_api_key', apiKey.value);
+
+                    if (eventSource) eventSource.close();
+                    if (decisionSource) decisionSource.close();
+                    if (flagSource) flagSource.close();
+                    connected.value = false;
+
+                    await fetchInitialData();
+
+                    eventSource = new EventSource(`/api/events/stream?api_key=${apiKey.value}`);
+                    eventSource.onmessage = (e) => {
+                        connected.value = true;
+                        const event = JSON.parse(e.data);
+                        events.value.unshift(event);
+                        if (events.value.length > 100) events.value.pop();
+                        stats.value.total_events++;
+                    };
+                    eventSource.onerror = () => {
+                        connected.value = false;
+                    };
+
+                    decisionSource = new EventSource(`/api/decisions/stream?api_key=${apiKey.value}`);
+                    decisionSource.onmessage = (e) => {
+                        connected.value = true;
+                        const decision = JSON.parse(e.data);
+                        decisions.value.unshift(decision);
+                        if (decisions.value.length > 50) decisions.value.pop();
+                        stats.value.total_decisions++;
+                        if (decision.verdict === 'BLOCK') {
+                            stats.value.blocks_today++;
+                        }
+                    };
+
+                    // Connect to flags stream for pending actions
+                    flagSource = new EventSource(`/api/flags/stream?api_key=${apiKey.value}`);
+                    flagSource.onmessage = (e) => {
+                        const data = JSON.parse(e.data);
+                        if (data.flags) {
+                            pendingFlags.value = data.flags;
+                        }
+                    };
+
+                    connected.value = true;
+                    statsInterval = setInterval(fetchStats, 30000);
+                };
+
+                const updateConfig = async () => {
+                    if (!apiKey.value) return;
+                    try {
+                        await fetch('/api/config', {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-API-Key': apiKey.value
+                            },
+                            body: JSON.stringify({
+                                sensitivity: parseInt(config.sensitivity),
+                                trusted_ports_manual: config.trusted_ports_manual,
+                                ignored_ports: config.ignored_ports,
+                                ignored_ips: config.ignored_ips,
+                                custom_prompt: config.custom_prompt,
+                                llm_api_url: config.llm_api_url,
+                                llm_api_key: config.llm_api_key,
+                                llm_model: config.llm_model,
+                                llm_timeout: parseInt(config.llm_timeout),
+                                event_buffer: parseInt(config.event_buffer)
+                            })
+                        });
+                    } catch (e) {
+                        console.error('Config update error:', e);
+                    }
+                };
+
+                const addPort = () => {
+                    const port = parseInt(newPort.value);
+                    if (port >= 1 && port <= 65535 && !config.trusted_ports_manual.includes(port)) {
+                        config.trusted_ports_manual.push(port);
+                        newPort.value = '';
+                        updateConfig();
+                    }
+                };
+
+                const removePort = (port) => {
+                    // Remove from manual list
+                    const manualIdx = config.trusted_ports_manual.indexOf(port);
+                    if (manualIdx > -1) {
+                        config.trusted_ports_manual.splice(manualIdx, 1);
+                    }
+                    // Remove from dynamic list
+                    const dynIdx = config.trusted_ports_dynamic.indexOf(port);
+                    if (dynIdx > -1) {
+                        config.trusted_ports_dynamic.splice(dynIdx, 1);
+                    }
+                    updateConfig();
+                };
+
+                const testConnection = async () => {
+                    if (!apiKey.value) return;
+                    connectionTesting.value = true;
+                    connectionResult.value = null;
+                    await updateConfig(); // Save settings first
+                    try {
+                        const res = await fetch('/api/test-connection', {
+                            method: 'POST',
+                            headers: { 'X-API-Key': apiKey.value }
+                        });
+                        if (res.ok) {
+                            connectionResult.value = await res.json();
+                        } else {
+                            connectionResult.value = { success: false, message: 'API error' };
+                        }
+                    } catch (e) {
+                        connectionResult.value = { success: false, message: 'Request failed' };
+                    }
+                    connectionTesting.value = false;
+                };
+
+                const purgeLogs = async () => {
+                    if (!apiKey.value) return;
+                    if (!confirm('Are you sure you want to delete ALL events and decisions? This cannot be undone.')) return;
+                    purgeResult.value = 'Purging...';
+                    try {
+                        const res = await fetch('/api/events/purge', {
+                            method: 'DELETE',
+                            headers: { 'X-API-Key': apiKey.value }
+                        });
+                        if (res.ok) {
+                            const data = await res.json();
+                            purgeResult.value = `Deleted ${data.events_deleted} events, ${data.decisions_deleted} decisions`;
+                            fetchStats();
+                        } else {
+                            purgeResult.value = 'Purge failed';
+                        }
+                    } catch (e) {
+                        purgeResult.value = 'Purge error';
+                    }
+                };
+
+                const updateDryRunMode = async () => {
+                    if (!apiKey.value) return;
+                    try {
+                        await fetch('/api/config', {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-API-Key': apiKey.value
+                            },
+                            body: JSON.stringify({ dry_run: dryRunMode.value })
+                        });
+                    } catch (e) {
+                        console.error('Dry run toggle error:', e);
+                    }
+                };
+
+                // (Chat methods moved to ChatComponent)
+
+                // Log methods
+                const fetchLogs = async () => {
+                    if (!apiKey.value) return;
+                    try {
+                        const res = await fetch('/api/logs?limit=100', {
+                            headers: { 'X-API-Key': apiKey.value }
+                        });
+                        if (res.ok) {
+                            logs.value = await res.json();
+                        }
+                    } catch (e) {
+                        console.error('Log fetch error:', e);
+                    }
+                };
+
+                const connectLogStream = async () => {
+                    if (!apiKey.value) return;
+
+                    // Fetch initial logs
+                    await fetchLogs();
+
+                    // Close existing connection
+                    if (logSource) logSource.close();
+
+                    // Connect to SSE stream
+                    logSource = new EventSource(`/api/logs/stream?api_key=${apiKey.value}`);
+                    logSource.onmessage = (e) => {
+                        const log = JSON.parse(e.data);
+                        logs.value.unshift(log);
+                        if (logs.value.length > 200) logs.value.pop();
+                    };
+                };
+
+                const clearLogs = async () => {
+                    if (!apiKey.value) return;
+                    try {
+                        await fetch('/api/logs', {
+                            method: 'DELETE',
+                            headers: { 'X-API-Key': apiKey.value }
+                        });
+                        logs.value = [];
+                    } catch (e) {
+                        console.error('Clear logs error:', e);
+                    }
+                };
+
+                // Lifecycle
+                onMounted(() => {
+                    if (apiKey.value) {
+                        connectStreams();
+                    }
+                });
+
+                onUnmounted(() => {
+                    if (eventSource) eventSource.close();
+                    if (decisionSource) decisionSource.close();
+                    if (logSource) logSource.close();
+                    if (statsInterval) clearInterval(statsInterval);
+                });
+
+                return {
+                    apiKey,
+                    connected,
+                    activeTab,
+                    events,
+                    decisions,
+                    logs,
+                    logFilter,
+                    config,
+                    stats,
+                    newPort,
+                    connectionTesting,
+                    connectionResult,
+                    sensitivityLabel,
+                    allTrustedPorts,
+                    filteredLogs,
+                    formatTime,
+                    renderMarkdown,
+                    getConfidenceClass,
+                    formatEventDetails,
+                    clearEvents,
+                    clearDecisions,
+                    connectStreams,
+                    connectLogStream,
+                    clearLogs,
+                    purgeLogs,
+                    purgeResult,
+                    updateDryRunMode,
+                    updateConfig,
+                    addPort,
+                    removePort,
+                    testConnection,
+                    pendingFlags,
+                    investigateFlag,
+                    dismissFlag,
+                    handleWheel,
+                    notificationConfig,
+                    testingTelegram,
+                    testingBark,
+                    telegramResult,
+                    barkResult,
+                    testTelegram,
+                    testBark,
+                    saveNotificationConfig,
+                    isDarkMode,
+                    toggleTheme
+                };
+            }
+        });
+
+        // Register ChatComponent
+        app.component('chat-component', window.ChatComponent);
+        app.mount('#app');
+    </script>
+</body>
+
+</html>

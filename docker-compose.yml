@@ -1,0 +1,22 @@
+# Agentic C-EDA - Docker Compose
+# Hybrid Architecture: Web dashboard in Docker, daemon on host
+
+services:
+  web:
+    build: .
+    container_name: C-EDA-dashboard
+    ports:
+      - "8000:8000"
+    volumes:
+      - /var/lib/agentic-c-eda:/var/lib/agentic-c-eda:rw
+      - ./daemon/.agent:/app/.agent:rw
+    environment:
+      - AGENT_API_KEY=${AGENT_API_KEY:-changeme}
+      - AGENT_DB_PATH=/var/lib/agentic-c-eda/agentic-c-eda.db
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
