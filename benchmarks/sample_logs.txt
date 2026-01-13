@@ -1,0 +1,64 @@
+# Sample Linux log file for benchmarking on Windows
+# Contains realistic syslog and auth.log entries
+# Use with: python system1_bench.py --replay sample_logs.txt
+
+# === NETWORK EVENTS (iptables LOG) ===
+Jan 10 14:23:01 server kernel: [Sentinel] IN=eth0 OUT= MAC=00:11:22:33:44:55:66:77:88:99:aa:bb:08:00 SRC=185.143.223.47 DST=10.0.0.5 LEN=60 TOS=0x00 PREC=0x00 TTL=49 ID=54321 DF PROTO=TCP SPT=45678 DPT=22 WINDOW=65535 RES=0x00 SYN URGP=0
+Jan 10 14:23:02 server kernel: [Sentinel] IN=eth0 OUT= MAC=00:11:22:33:44:55:66:77:88:99:aa:bb:08:00 SRC=185.143.223.47 DST=10.0.0.5 LEN=60 TOS=0x00 PREC=0x00 TTL=49 ID=54322 DF PROTO=TCP SPT=45679 DPT=3389 WINDOW=65535 RES=0x00 SYN URGP=0
+Jan 10 14:23:03 server kernel: [Sentinel] IN=eth0 OUT= MAC=00:11:22:33:44:55:66:77:88:99:aa:bb:08:00 SRC=192.168.1.100 DST=10.0.0.5 LEN=60 TOS=0x00 PREC=0x00 TTL=64 ID=12345 DF PROTO=TCP SPT=50000 DPT=8080 WINDOW=65535 RES=0x00 SYN URGP=0
+Jan 10 14:23:04 server kernel: [Sentinel] IN=eth0 OUT= MAC=00:11:22:33:44:55:66:77:88:99:aa:bb:08:00 SRC=45.33.32.156 DST=10.0.0.5 LEN=60 TOS=0x00 PREC=0x00 TTL=52 ID=11111 DF PROTO=TCP SPT=55555 DPT=445 WINDOW=65535 RES=0x00 SYN URGP=0
+Jan 10 14:23:05 server kernel: [Sentinel] IN=eth0 OUT= MAC=00:11:22:33:44:55:66:77:88:99:aa:bb:08:00 SRC=185.143.223.47 DST=10.0.0.5 LEN=84 TOS=0x00 PREC=0x00 TTL=49 ID=54323 PROTO=ICMP TYPE=8 CODE=0 ID=1234 SEQ=1
+
+# === NOISE (should be filtered) ===
+Jan 10 14:23:06 server kernel: IN=lo OUT= SRC=127.0.0.1 DST=127.0.0.1 LEN=60 PROTO=TCP SPT=5000 DPT=5000
+Jan 10 14:23:07 server kernel: [Sentinel] IN=eth0 OUT= SRC=10.0.0.50 DST=224.0.0.251 LEN=60 PROTO=UDP SPT=5353 DPT=5353
+Jan 10 14:23:08 server kernel: [Sentinel] IN=eth0 OUT= SRC=10.0.0.1 DST=255.255.255.255 LEN=300 PROTO=UDP SPT=67 DPT=68
+Jan 10 14:23:09 server systemd-logind[1234]: New session 42 of user petej.
+Jan 10 14:23:10 server CRON[5678]: (root) CMD (/usr/lib/php/sessionclean)
+
+# === SSH AUTH EVENTS ===
+Jan 10 14:24:01 server sshd[12345]: Failed password for root from 185.143.223.47 port 45678 ssh2
+Jan 10 14:24:02 server sshd[12346]: Failed password for root from 185.143.223.47 port 45679 ssh2
+Jan 10 14:24:03 server sshd[12347]: Failed password for admin from 185.143.223.47 port 45680 ssh2
+Jan 10 14:24:04 server sshd[12348]: Failed password for ubuntu from 185.143.223.47 port 45681 ssh2
+Jan 10 14:24:05 server sshd[12349]: Failed password for test from 185.143.223.47 port 45682 ssh2
+Jan 10 14:24:06 server sshd[12350]: Invalid user oracle from 45.33.32.156 port 55556
+Jan 10 14:24:07 server sshd[12351]: Invalid user postgres from 45.33.32.156 port 55557
+Jan 10 14:24:08 server sshd[12352]: Accepted publickey for petej from 10.0.0.100 port 52000 ssh2
+Jan 10 14:24:09 server sshd[12353]: Connection closed by authenticating user petej 10.0.0.100 port 52001
+
+# === SUDO EVENTS ===
+Jan 10 14:25:01 server sudo: petej : TTY=pts/0 ; PWD=/home/petej ; USER=root ; COMMAND=/usr/bin/apt update
+Jan 10 14:25:02 server sudo: petej : TTY=pts/0 ; PWD=/home/petej ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Jan 10 14:25:03 server sudo: pam_unix(sudo:auth): authentication failure; logname=baduser tty=/dev/pts/1 uid=1001
+
+# === PAM SESSION EVENTS ===
+Jan 10 14:26:01 server sshd[12360]: pam_unix(sshd:session): session opened for user petej by (uid=0)
+Jan 10 14:26:02 server sshd[12360]: pam_unix(sshd:session): session closed for user petej
+Jan 10 14:26:03 server login[12370]: pam_unix(login:session): session opened for user admin by LOGIN(uid=0)
+
+# === PORT SCAN SIMULATION ===
+Jan 10 14:27:01 server kernel: [Sentinel] IN=eth0 OUT= SRC=192.168.1.50 DST=10.0.0.5 LEN=44 TOS=0x00 TTL=64 ID=1 DF PROTO=TCP SPT=40000 DPT=21 WINDOW=1024 RES=0x00 SYN URGP=0
+Jan 10 14:27:01 server kernel: [Sentinel] IN=eth0 OUT= SRC=192.168.1.50 DST=10.0.0.5 LEN=44 TOS=0x00 TTL=64 ID=2 DF PROTO=TCP SPT=40001 DPT=23 WINDOW=1024 RES=0x00 SYN URGP=0
+Jan 10 14:27:01 server kernel: [Sentinel] IN=eth0 OUT= SRC=192.168.1.50 DST=10.0.0.5 LEN=44 TOS=0x00 TTL=64 ID=3 DF PROTO=TCP SPT=40002 DPT=25 WINDOW=1024 RES=0x00 SYN URGP=0
+Jan 10 14:27:01 server kernel: [Sentinel] IN=eth0 OUT= SRC=192.168.1.50 DST=10.0.0.5 LEN=44 TOS=0x00 TTL=64 ID=4 DF PROTO=TCP SPT=40003 DPT=110 WINDOW=1024 RES=0x00 SYN URGP=0
+Jan 10 14:27:01 server kernel: [Sentinel] IN=eth0 OUT= SRC=192.168.1.50 DST=10.0.0.5 LEN=44 TOS=0x00 TTL=64 ID=5 DF PROTO=TCP SPT=40004 DPT=139 WINDOW=1024 RES=0x00 SYN URGP=0
+Jan 10 14:27:02 server kernel: [Sentinel] IN=eth0 OUT= SRC=192.168.1.50 DST=10.0.0.5 LEN=44 TOS=0x00 TTL=64 ID=6 DF PROTO=TCP SPT=40005 DPT=143 WINDOW=1024 RES=0x00 SYN URGP=0
+Jan 10 14:27:02 server kernel: [Sentinel] IN=eth0 OUT= SRC=192.168.1.50 DST=10.0.0.5 LEN=44 TOS=0x00 TTL=64 ID=7 DF PROTO=TCP SPT=40006 DPT=993 WINDOW=1024 RES=0x00 SYN URGP=0
+Jan 10 14:27:02 server kernel: [Sentinel] IN=eth0 OUT= SRC=192.168.1.50 DST=10.0.0.5 LEN=44 TOS=0x00 TTL=64 ID=8 DF PROTO=TCP SPT=40007 DPT=995 WINDOW=1024 RES=0x00 SYN URGP=0
+
+# === MORE BRUTE FORCE (from different IP) ===
+Jan 10 14:28:01 server sshd[12400]: Failed password for root from 92.118.160.10 port 33000 ssh2
+Jan 10 14:28:02 server sshd[12401]: Failed password for admin from 92.118.160.10 port 33001 ssh2
+Jan 10 14:28:03 server sshd[12402]: Failed password for user from 92.118.160.10 port 33002 ssh2
+Jan 10 14:28:04 server sshd[12403]: Failed password for guest from 92.118.160.10 port 33003 ssh2
+Jan 10 14:28:05 server sshd[12404]: Failed password for support from 92.118.160.10 port 33004 ssh2
+
+# === INTERNAL TRUSTED TRAFFIC (should be filtered by trust filter) ===
+Jan 10 14:29:01 server kernel: [Sentinel] IN=eth0 OUT= SRC=10.0.0.50 DST=10.0.0.5 LEN=60 TOS=0x00 TTL=64 ID=99999 DF PROTO=TCP SPT=50000 DPT=22 WINDOW=65535 RES=0x00 SYN URGP=0
+Jan 10 14:29:02 server kernel: [Sentinel] IN=eth0 OUT= SRC=10.0.0.100 DST=10.0.0.5 LEN=60 TOS=0x00 TTL=64 ID=99998 DF PROTO=TCP SPT=50001 DPT=80 WINDOW=65535 RES=0x00 SYN URGP=0
+
+# === LEGITIMATE USER ACTIVITY ===
+Jan 10 14:30:01 server sshd[12500]: Accepted password for developer from 10.0.0.200 port 60000 ssh2
+Jan 10 14:30:02 server sudo: developer : TTY=pts/1 ; PWD=/home/developer ; USER=root ; COMMAND=/usr/bin/docker ps
+Jan 10 14:30:03 server sshd[12500]: pam_unix(sshd:session): session opened for user developer by (uid=0)
