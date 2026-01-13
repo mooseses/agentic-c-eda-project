@@ -1,5 +1,7 @@
 # Agentic C-EDA Deployment Guide
 
+[Benchmark Suite User Guide](./benchmarks/README.md)
+
 ## Quick Start
 
 ```bash
